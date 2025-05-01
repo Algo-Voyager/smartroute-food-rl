@@ -1,61 +1,156 @@
 # Food Delivery Reinforcement Learning
 
-A dynamic routing system for on-demand meal delivery leveraging reinforcement learning, capable of handling up to 10⁸ synthetic orders.
+A dynamic routing system for on-demand meal delivery leveraging reinforcement learning, capable of handling up to 10⁸ orders.
+
+---
+
+## Table of Contents
+
+1. [Project Structure](#project-structure)  
+2. [Setup](#setup)  
+3. [Usage](#usage)  
+   - [Generate Data](#generate-data)  
+   - [Training](#training)  
+   - [Pause & Resume Training](#pause--resume-training)  
+   - [Evaluation](#evaluation)  
+   - [Visualization](#visualization)  
+4. [Running the Full Pipeline](#running-the-full-pipeline)  
+5. [Features](#features)  
+
+---
 
 ## Project Structure
 
-- `data/`: Contains synthetic data generators and datasets
-- `envs/`: RL environment implementation for delivery simulation
-- `agents/`: RL models and baseline heuristic implementations
-- `training/`: Training scripts and utilities
-- `evaluation/`: Evaluation metrics and analysis tools
-- `config/`: Configuration files for the environment and models
-- `visualization/`: Scripts for visualizing results and simulation
+```
+.
+├── config/              # JSON config files (environment, training, evaluation)
+├── data/                # Synthetic data generators and datasets
+├── envs/                # RL environment implementations
+├── agents/              # RL models and baseline heuristics
+├── training/            # Training scripts and utilities
+├── evaluation/          # Evaluation metrics and analysis tools
+├── visualization/       # Scripts for plotting and simulation playback
+├── logs/                # TensorBoard log directory
+├── models/              # Saved checkpoints and normalization state
+├── resume_training.py   # Script to resume from the latest or specified checkpoint
+├── requirements.txt     # Python dependencies
+└── main.py              # Entry-point for full pipeline
+```
+
+---
 
 ## Setup
 
-```bash
-# Install dependencies
-pip install -r requirements.txt
-```
+1. **Clone the repo**  
+   ```bash
+   git clone https://github.com/yourusername/mtp-food-delivery-RL.git
+   cd mtp-food-delivery-RL
+   ```
+
+2. **Create & activate a virtual environment**
+
+   ```bash
+   python3 -m venv venv
+   source venv/bin/activate
+   ```
+
+3. **Install dependencies**
+
+   ```bash
+   pip install -r requirements.txt
+   ```
+
+---
 
 ## Usage
 
-1. Generate synthetic data:
+### Generate Data
+
 ```bash
-python data/generate_data.py
+python data/generate_data.py \
+  --n_restaurants 200 \
+  --n_drivers 50 \
+  --n_orders 100000 \
+  --grid_size 20
 ```
 
-2. Train the RL model:
+All parameters have sensible defaults; omit flags to use them.
+
+### Training
+
 ```bash
-python training/train_ppo.py
+python training/train_ppo.py \
+  --config config/default_config.json
 ```
 
-3. Pause and resume training:
-```bash
-# Training automatically saves checkpoints
-# To resume from the latest checkpoint:
-python resume_training.py
+* Checkpoints (every 240,000 steps) go to `models/`.
+* TensorBoard logs go to `logs/` (view with `tensorboard --logdir logs`).
 
-# To resume from a specific checkpoint:
-python resume_training.py --manual_checkpoint models/ppo_delivery_specific_checkpoint.zip
+You can override any hyperparameter on the CLI, for example:
+
+```bash
+python training/train_ppo.py \
+  --n_envs 16 \
+  --learning_rate 1e-4 \
+  --total_timesteps 5e6
 ```
 
-4. Evaluate the model:
+### Pause & Resume Training
+
+* **Pause**: Ctrl+C
+* **Resume (latest checkpoint)**:
+
+  ```bash
+  python resume_training.py
+  ```
+* **Resume (specific checkpoint)**:
+
+  ```bash
+  python resume_training.py \
+    --manual_checkpoint models/ppo_delivery_480000.zip
+  ```
+
+### Evaluation
+
 ```bash
-python evaluation/evaluate.py
+python evaluation/evaluate.py \
+  --n_episodes 10 \
+  --model_path models/ppo_delivery_final.zip \
+  --vec_normalize_path models/vec_normalize.pkl \
+  --output_dir evaluation/
 ```
 
-5. Visualize results:
+### Visualization
+
 ```bash
-python visualization/visualize.py
+python visualization/visualize.py \
+  --input_dir evaluation/ \
+  --output_dir visualization/
 ```
+
+---
+
+## Running the Full Pipeline
+
+```bash
+python main.py --all
+```
+
+This will sequentially perform:
+
+1. Data generation
+2. Model training
+3. Evaluation
+4. Visualization
+
+---
 
 ## Features
 
-- Synthetic dataset generation (restaurants, orders, drivers, road network)
-- OpenAI Gym-compatible simulation environment
-- PPO implementation for driver assignment and routing
-- Baseline heuristics for comparison
-- Comprehensive evaluation metrics and visualizations
-- Automatic checkpoint saving and ability to pause/resume training 
+* **Synthetic data generator** for restaurants, orders, drivers, and road networks
+* **OpenAI Gym–compatible** delivery simulation environment
+* **PPO-based RL agent** with customizable policy and hyperparameters
+* **Baseline heuristics** for performance comparison
+* **Automatic checkpointing** (step-based + hourly) and seamless resume
+* **TensorBoard integration** for real-time monitoring
+* **Comprehensive evaluation** metrics and visualizations 
