@@ -60,7 +60,7 @@ def parse_args():
     # Training parameters
     parser.add_argument("--total_timesteps", type=float, default=1e7,
                        help="Total number of timesteps to train for")
-    parser.add_argument("--checkpoint_freq", type=int, default=100000,
+    parser.add_argument("--checkpoint_freq", type=int, default=10000,
                        help="Frequency of checkpointing (in timesteps)")
     parser.add_argument("--eval_freq", type=int, default=50000,
                        help="Frequency of evaluation (in timesteps)")
@@ -96,6 +96,10 @@ def main():
     # Create directories
     os.makedirs(args.log_dir, exist_ok=True)
     os.makedirs(args.model_dir, exist_ok=True)
+    
+    # Make paths absolute
+    if args.resume and not os.path.isabs(args.resume):
+        args.resume = os.path.abspath(args.resume)
     
     # Environment keyword arguments
     env_kwargs = {
