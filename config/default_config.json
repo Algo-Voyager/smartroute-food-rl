@@ -1,0 +1,40 @@
+{
+    "environment": {
+        "data_dir": "../data",
+        "day_start": 10,
+        "day_end": 22,
+        "city_size": 10.0,
+        "use_road_network": true,
+        "max_orders": 100,
+        "max_drivers": 50,
+        "avg_speed": 30
+    },
+    "data_generation": {
+        "n_restaurants": 200,
+        "n_drivers": 50,
+        "n_orders": 100000,
+        "grid_size": 20
+    },
+    "training": {
+        "policy": "MultiInputPolicy",
+        "n_envs": 8,
+        "gamma": 0.99,
+        "learning_rate": 3e-4,
+        "n_steps": 2048,
+        "batch_size": 64,
+        "ent_coef": 0.01,
+        "clip_range": 0.2,
+        "total_timesteps": 10000000,
+        "checkpoint_freq": 100000,
+        "eval_freq": 50000
+    },
+    "evaluation": {
+        "n_episodes": 10,
+        "model_path": "../models/ppo_delivery_final.zip",
+        "vec_normalize_path": "../models/vec_normalize.pkl",
+        "output_dir": "../evaluation"
+    },
+    "visualization": {
+        "output_dir": "../visualization"
+    }
+} 
