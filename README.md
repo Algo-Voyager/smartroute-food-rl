@@ -31,12 +31,22 @@ python data/generate_data.py
 python training/train_ppo.py
 ```
 
-3. Evaluate the model:
+3. Pause and resume training:
+```bash
+# Training automatically saves checkpoints
+# To resume from the latest checkpoint:
+python resume_training.py
+
+# To resume from a specific checkpoint:
+python resume_training.py --manual_checkpoint models/ppo_delivery_specific_checkpoint.zip
+```
+
+4. Evaluate the model:
 ```bash
 python evaluation/evaluate.py
 ```
 
-4. Visualize results:
+5. Visualize results:
 ```bash
 python visualization/visualize.py
 ```
@@ -47,4 +57,5 @@ python visualization/visualize.py
 - OpenAI Gym-compatible simulation environment
 - PPO implementation for driver assignment and routing
 - Baseline heuristics for comparison
-- Comprehensive evaluation metrics and visualizations 
+- Comprehensive evaluation metrics and visualizations
+- Automatic checkpoint saving and ability to pause/resume training 
