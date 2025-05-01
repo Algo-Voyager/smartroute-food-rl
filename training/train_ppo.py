@@ -17,14 +17,14 @@ import random
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from envs.delivery_env import DeliveryEnv
-from agents.rl_agent import DeliveryRLAgent, CustomCallback
+from agents.rl_agent import DeliveryRLAgent, CustomCallback, ProgressCallback
 
 def parse_args():
     """Parse command line arguments."""
     parser = argparse.ArgumentParser(description="Train PPO agent for food delivery")
     
     # Environment parameters
-    parser.add_argument("--data_dir", type=str, default="../data",
+    parser.add_argument("--data_dir", type=str, default="data",
                        help="Directory containing data files")
     parser.add_argument("--day_start", type=int, default=10,
                        help="Starting hour of the day (24h format)")
@@ -60,13 +60,13 @@ def parse_args():
     # Training parameters
     parser.add_argument("--total_timesteps", type=float, default=1e7,
                        help="Total number of timesteps to train for")
-    parser.add_argument("--checkpoint_freq", type=int, default=10000,
+    parser.add_argument("--checkpoint_freq", type=int, default=240000,
                        help="Frequency of checkpointing (in timesteps)")
     parser.add_argument("--eval_freq", type=int, default=50000,
                        help="Frequency of evaluation (in timesteps)")
-    parser.add_argument("--log_dir", type=str, default="../logs",
+    parser.add_argument("--log_dir", type=str, default="logs",
                        help="Directory for logs")
-    parser.add_argument("--model_dir", type=str, default="../models",
+    parser.add_argument("--model_dir", type=str, default="models",
                        help="Directory for models")
     parser.add_argument("--seed", type=int, default=42,
                        help="Random seed")
@@ -147,7 +147,8 @@ def main():
     agent.train(
         total_timesteps=args.total_timesteps,
         checkpoint_freq=args.checkpoint_freq,
-        eval_freq=args.eval_freq
+        eval_freq=args.eval_freq,
+        model_dir=args.model_dir
     )
     print("Training complete!")
 

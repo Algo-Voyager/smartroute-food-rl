@@ -15,6 +15,7 @@ from stable_baselines3.common.callbacks import BaseCallback, EvalCallback, Check
 from stable_baselines3.common.monitor import Monitor
 from stable_baselines3.common.utils import set_random_seed
 import torch as th
+import time
 
 def make_env(env_id, env_kwargs, rank, seed=0):
     """
@@ -87,6 +88,7 @@ class DeliveryRLAgent:
         self.env_class = env_class
         self.env_kwargs = env_kwargs
         self.n_envs = n_envs
+        self.tensorboard_log = tensorboard_log
         
         # Default policy network configuration if not provided
         if policy_kwargs is None:
@@ -126,7 +128,7 @@ class DeliveryRLAgent:
             device=device
         )
     
-    def train(self, total_timesteps=1e7, checkpoint_freq=100000, eval_freq=50000):
+    def train(self, total_timesteps=1e7, checkpoint_freq=100000, eval_freq=50000, model_dir="./models"):
         """
         Train the RL agent.
         
@@ -134,19 +136,37 @@ class DeliveryRLAgent:
             total_timesteps: Total number of timesteps to train for
             checkpoint_freq: Frequency of checkpointing (in timesteps)
             eval_freq: Frequency of evaluation (in timesteps)
+            model_dir: Directory to save models and checkpoints
             
         Returns:
             Trained model
         """
         # Create directory for checkpoints
-        os.makedirs("./models", exist_ok=True)
+        os.makedirs(model_dir, exist_ok=True)
+        best_model_dir = os.path.join(model_dir, "best")
+        os.makedirs(best_model_dir, exist_ok=True)
         
         # Create callbacks
+        # Save an initial checkpoint after 10 steps to verify saving works
+        initial_checkpoint_callback = CheckpointCallback(
+            save_freq=10,
+            save_path=model_dir,
+            name_prefix="ppo_delivery_initial",
+            save_vecnormalize=True,
+            verbose=1
+        )
+        
+        # Regular checkpoint callback
         checkpoint_callback = CheckpointCallback(
             save_freq=checkpoint_freq,
-            save_path="./models/",
-            name_prefix="ppo_delivery"
+            save_path=model_dir,
+            name_prefix="ppo_delivery",
+            save_vecnormalize=True,
+            verbose=1
         )
+        
+        # Progress tracking callback
+        progress_callback = ProgressCallback(verbose=1)
         
         # Create evaluation environment
         eval_env = SubprocVecEnv([
@@ -168,8 +188,8 @@ class DeliveryRLAgent:
         
         eval_callback = EvalCallback(
             eval_env,
-            best_model_save_path="./models/best/",
-            log_path="./logs/",
+            best_model_save_path=best_model_dir,
+            log_path=self.tensorboard_log,
             eval_freq=eval_freq,
             deterministic=True,
             render=False
@@ -178,14 +198,16 @@ class DeliveryRLAgent:
         # Train the agent
         self.model.learn(
             total_timesteps=int(total_timesteps),
-            callback=[checkpoint_callback, eval_callback]
+            callback=[initial_checkpoint_callback, checkpoint_callback, eval_callback, progress_callback]
         )
         
         # Save the final model
-        self.model.save("./models/ppo_delivery_final")
+        final_model_path = os.path.join(model_dir, "ppo_delivery_final")
+        self.model.save(final_model_path)
         
         # Save normalization parameters
-        self.env.save("./models/vec_normalize.pkl")
+        vec_normalize_path = os.path.join(model_dir, "vec_normalize.pkl")
+        self.env.save(vec_normalize_path)
         
         return self.model
     
@@ -268,5 +290,87 @@ class CustomCallback(BaseCallback):
             if env.total_deliveries > 0:
                 avg_delivery_time = env.total_delivery_time / env.total_deliveries
                 self.logger.record("metrics/avg_delivery_time", avg_delivery_time)
+        
+        return True 
+
+class ProgressCallback(BaseCallback):
+    """
+    Callback to print training progress information.
+    """
+    def __init__(self, verbose=1):
+        super(ProgressCallback, self).__init__(verbose)
+        self.last_time = time.time()
+        self.training_start_time = time.time()
+        self.last_hourly_checkpoint_time = time.time()
+        self.iteration_time = []
+        self.last_saved_checkpoint = None
+        
+    def _on_training_start(self):
+        print(f"Training started at {time.strftime('%Y-%m-%d %H:%M:%S')}")
+        self.training_start_time = time.time()
+        self.last_hourly_checkpoint_time = time.time()
+        
+    def _on_step(self):
+        current_time = time.time()
+        
+        # Check if an hour has passed since the last hourly checkpoint
+        if current_time - self.last_hourly_checkpoint_time >= 3600:  # 3600 seconds = 1 hour
+            # Save an hourly checkpoint
+            checkpoint_path = os.path.join(
+                os.path.dirname(self.model.tensorboard_log),
+                "models",
+                f"ppo_delivery_hourly_{int(current_time - self.training_start_time)}s.zip"
+            )
+            self.model.save(checkpoint_path)
+            
+            # Save VecNormalize
+            vec_normalize_path = os.path.join(
+                os.path.dirname(self.model.tensorboard_log),
+                "models",
+                "vec_normalize.pkl"
+            )
+            self.training_env.save(vec_normalize_path)
+            
+            print(f"Hourly checkpoint saved: {checkpoint_path}")
+            self.last_hourly_checkpoint_time = current_time
+        
+        if self.n_calls % 100 == 0:
+            elapsed = current_time - self.last_time
+            self.iteration_time.append(elapsed)
+            
+            if len(self.iteration_time) > 10:
+                self.iteration_time.pop(0)
+                
+            avg_time = sum(self.iteration_time) / len(self.iteration_time)
+            steps_per_second = 100 / avg_time
+            
+            # Calculate estimated time for next checkpoint
+            if hasattr(self.model, 'num_timesteps') and hasattr(self.model, '_last_checkpoint_step'):
+                steps_to_next_checkpoint = 240000 - (self.model.num_timesteps % 240000)
+                time_to_next_checkpoint = steps_to_next_checkpoint / steps_per_second
+                next_checkpoint_time = time.strftime('%H:%M:%S', time.gmtime(current_time + time_to_next_checkpoint))
+                print(f"Next regular checkpoint in ~{time_to_next_checkpoint/60:.1f} minutes at ~{next_checkpoint_time}")
+            
+            # Calculate time until next hourly checkpoint
+            time_to_hourly = 3600 - (current_time - self.last_hourly_checkpoint_time)
+            next_hourly_time = time.strftime('%H:%M:%S', time.gmtime(current_time + time_to_hourly))
+            print(f"Next hourly checkpoint in ~{time_to_hourly/60:.1f} minutes at ~{next_hourly_time}")
+            
+            print(f"Step: {self.n_calls}, "
+                  f"FPS: {steps_per_second:.2f}, "
+                  f"Elapsed: {elapsed:.2f}s, "
+                  f"Total timesteps: {self.model.num_timesteps}")
+            
+            self.last_time = current_time
+            
+            # Look for newest checkpoint file
+            import glob
+            checkpoints = glob.glob(os.path.join(os.path.dirname(self.model.tensorboard_log), 
+                                               "models/ppo_delivery_*.zip"))
+            if checkpoints:
+                newest_checkpoint = max(checkpoints, key=os.path.getctime)
+                if newest_checkpoint != self.last_saved_checkpoint:
+                    self.last_saved_checkpoint = newest_checkpoint
+                    print(f"New checkpoint saved: {newest_checkpoint}")
         
         return True 
