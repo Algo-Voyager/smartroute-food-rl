@@ -2,6 +2,7 @@
 import os
 import sys
 import glob
+import json
 import subprocess
 import argparse
 
@@ -13,7 +14,30 @@ def find_latest_checkpoint():
         os.makedirs('models', exist_ok=True)
         return None
     
-    # Find all checkpoint files
+    # First, check for checkpoint counter file
+    counter_file = 'models/checkpoint_counter.json'
+    if os.path.exists(counter_file):
+        try:
+            with open(counter_file, 'r') as f:
+                counter_data = json.load(f)
+                last_checkpoint = counter_data.get('last_checkpoint')
+                if last_checkpoint and os.path.exists(last_checkpoint):
+                    print(f"Found latest checkpoint from counter file: {last_checkpoint}")
+                    print(f"Total training hours so far: {counter_data.get('hours_elapsed', 0)}")
+                    return last_checkpoint
+        except Exception as e:
+            print(f"Warning: Could not load checkpoint counter: {e}")
+    
+    # Look for hourly checkpoints first
+    hourly_checkpoints = glob.glob('models/ppo_delivery_hourly_*h.zip')
+    if hourly_checkpoints:
+        # Sort by hour number
+        hourly_checkpoints.sort(key=lambda x: int(x.split('_')[-1].split('h')[0]))
+        latest_hourly = hourly_checkpoints[-1]
+        print(f"Found latest hourly checkpoint: {latest_hourly}")
+        return latest_hourly
+    
+    # Find all step-based checkpoint files
     checkpoints = glob.glob('models/ppo_delivery_*.zip')
     
     # Also check for final model

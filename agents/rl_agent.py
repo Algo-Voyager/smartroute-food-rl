@@ -16,6 +16,7 @@ from stable_baselines3.common.monitor import Monitor
 from stable_baselines3.common.utils import set_random_seed
 import torch as th
 import time
+import json
 
 def make_env(env_id, env_kwargs, rank, seed=0):
     """
@@ -295,12 +296,25 @@ class ProgressCallback(BaseCallback):
         self.last_hourly_checkpoint_time = time.time()
         self.iteration_time = []
         self.last_saved_checkpoint = None
+        self.hours_elapsed = 0
+        self.checkpoint_counter_file = os.path.join("models", "checkpoint_counter.json")
         
     def _on_training_start(self):
+        # Load previous checkpoint counter if available
+        if os.path.exists(self.checkpoint_counter_file):
+            try:
+                with open(self.checkpoint_counter_file, 'r') as f:
+                    counter_data = json.load(f)
+                    self.hours_elapsed = counter_data.get('hours_elapsed', 0)
+                    print(f"Resuming from previous session with {self.hours_elapsed} hours elapsed")
+            except Exception as e:
+                print(f"Warning: Could not load checkpoint counter: {e}")
+                self.hours_elapsed = 0
+        
         print(f"Training started at {time.strftime('%Y-%m-%d %H:%M:%S')}")
         self.training_start_time = time.time()
         self.last_hourly_checkpoint_time = time.time()
-        print(f"First hourly checkpoint will be saved in 60 minutes")
+        print(f"Next hourly checkpoint ({self.hours_elapsed + 1}h) will be saved in 60 minutes")
         
     def _on_step(self):
         current_time = time.time()
@@ -308,12 +322,14 @@ class ProgressCallback(BaseCallback):
         # Check if an hour has passed since the last hourly checkpoint
         elapsed_since_last_hourly = current_time - self.last_hourly_checkpoint_time
         if elapsed_since_last_hourly >= 3600:  # 3600 seconds = 1 hour
+            # Increment hours elapsed counter
+            self.hours_elapsed += 1
+            
             # Save an hourly checkpoint
-            hours_elapsed = int((current_time - self.training_start_time) / 3600)
             checkpoint_path = os.path.join(
                 os.path.dirname(self.model.tensorboard_log),
                 "models",
-                f"ppo_delivery_hourly_{hours_elapsed}h.zip"
+                f"ppo_delivery_hourly_{self.hours_elapsed}h.zip"
             )
             self.model.save(checkpoint_path)
             
@@ -325,9 +341,22 @@ class ProgressCallback(BaseCallback):
             )
             self.training_env.save(vec_normalize_path)
             
+            # Save the checkpoint counter to file
+            try:
+                counter_data = {
+                    'hours_elapsed': self.hours_elapsed,
+                    'last_checkpoint_time': time.time(),
+                    'last_checkpoint': checkpoint_path
+                }
+                os.makedirs(os.path.dirname(self.checkpoint_counter_file), exist_ok=True)
+                with open(self.checkpoint_counter_file, 'w') as f:
+                    json.dump(counter_data, f)
+            except Exception as e:
+                print(f"Warning: Could not save checkpoint counter: {e}")
+            
             print(f"\n======================================")
             print(f"HOURLY CHECKPOINT SAVED: {checkpoint_path}")
-            print(f"Training time: {hours_elapsed} hours")
+            print(f"Total training time: {self.hours_elapsed} hours")
             print(f"======================================\n")
             
             self.last_hourly_checkpoint_time = current_time
